@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@2.8.0"></script>
+<div style="margin-top:10px">
+    <div class="container">
+        <div class="row">
+            <div class="col-6">
+                <h2 class="text-center">Age and gender predictor</h2>
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-6" style="padding-left: 20px;padding-right: 20px">
+                <form enctype="multipart/form-data" action="{{ url_for('upload_file') }}"
+                      method="post" id="form_image">
+                    <div class="custom-file">
+                        <input type="file" name="file" class="custom-file-input" id="customFile">
+                        <label class="custom-file-label" for="customFile">Please select a jpeg image...</label>
+                    </div>
+                </form>
+            </div>
+            <div class="col-2" style="padding-left: 0px;padding-right: 20px">
+                <button class="btn  btn-dark btn-block" type="submit" form="form_image"
+                        data-toggle="modal" data-target="#myModal">
+                    Predict
+                </button>
+            </div>
+            <div class="col-4">
+
+            </div>
+        </div>
+        <div class="row mt-3">
+            {% if results %}
+                {% for result in results %}
+                <div class="col-6 ">
+                    <img src={{ image }} style="width:98%;max-width:1200px" class="img-thumbnail">
+                </div>
+                <div class="col-6" style="background-color:#f7f7f7;">
+                    <div class="row mt-4 ">
+                        <div class="col-4">
+                            <img src={{ result.cropped_image }} style="width:70%;" class="img img-rounded img-fluid"/>
+                        </div>
+                        <div class="col-6 ">
+                            <div class="row">
+                                <strong>{{ result.target_gender }}</strong>
+                            </div>
+                            <div class="row">
+                                <strong>{{ result.target_age }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-2"></div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <canvas id= {{ result.index_gender }}  style="width: 500px; height: 110px"></canvas>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <canvas id= {{ result.index_age }}  style="width: 500px; height: 200px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <script>
+                    // https://www.chartjs.org/
+                    var gender_ctx = document.getElementById({{ result.index_gender|tojson }}).getContext('2d');
+                    var myGenderChart = new Chart(gender_ctx, {
+                        type: 'horizontalBar',
+                        data: {
+                            labels: ["Gender"],
+                            datasets: [
+                                {
+                                    label: 'Male',
+                                    data: [{{ result.prob_male|tojson }}],
+                                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                    borderColor:  'rgba(255,99,132,1)',
+                                    borderWidth: 3,
+                                },
+                                {
+                                    label: 'Female',
+                                    data: [{{ result.prob_female|tojson }}],
+                                    backgroundColor:   'rgba(255, 206, 86, 0.2)',
+                                    borderColor:  'rgba(255, 206, 86, 1)',
+                                    borderWidth: 3,
+                                },
+                            ]
+                        },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                scales: {
+                                    xAxes:  [{ stacked: true }],
+                                    yAxes:  [{ stacked: true, }],
+                                }
+                            },
+                        });
+                </script>
+                <script>
+                    // https://www.chartjs.org/
+                    var age_ctx = document.getElementById({{ result.index_age|tojson }}).getContext('2d');
+                    var myAgeChart = new Chart(age_ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                            datasets: [{
+                                label: 'Probabilities in each range of age',
+                                data: {{ result.prob_age|tojson }},
+                                backgroundColor: [
+                                    'rgba(255, 99, 132, 0.2)',
+                                    'rgba(54, 162, 235, 0.2)',
+                                    'rgba(255, 206, 86, 0.2)',
+                                    'rgba(75, 192, 192, 0.2)',
+                                    'rgba(153, 102, 255, 0.2)',
+                                    'rgba(255, 159, 64, 0.2)',
+                                    'rgba(255, 99, 132, 0.2)',
+                                    'rgba(54, 162, 235, 0.2)',
+                                    'rgba(255, 206, 86, 0.2)',
+                                    'rgba(75, 192, 192, 0.2)'
+                                ],
+                                borderColor: [
+                                    'rgba(255,99,132,1)',
+                                    'rgba(54, 162, 235, 1)',
+                                    'rgba(255, 206, 86, 1)',
+                                    'rgba(75, 192, 192, 1)',
+                                    'rgba(153, 102, 255, 1)',
+                                    'rgba(255, 159, 64, 1)',
+                                    'rgba(255,99,132,1)',
+                                    'rgba(54, 162, 235, 1)',
+                                    'rgba(255, 206, 86, 1)',
+                                    'rgba(75, 192, 192, 1)',
+                                ],
+                                borderWidth: 3
+                            }]},
+                        options: {
+                        scales: {
+                            yAxes: [{
+                                ticks: {
+                                    beginAtZero: true
+                                    }
+                                }]
+                            }}
+                    });
+                </script>
+                {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Age&Gender Predictor</title>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+          integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <!-- CSS -->
+    <link href="static/css/style.css" rel="stylesheet">
+</head>
+<body class="text-center">
+<div style="margin-top:10px">
+    <div class="container">
+        <div class="row">
+            <div class="col-6">
+                <h1>Age&Gender Predictor</h1>
+            </div>
+            <div class="col-2"></div>
+            <div class="col-4">Video demo</div>
+        </div>
+        <div class="row">
+            <div class="col-6">
+                <img src="{{ url_for('app.streaming_result') }}">
+            </div>
+            <div class="col-2"></div>
+            <div class="col-4"></div>
+        </div>
+    </div>
+
+</div>
+
+
+<script src="static/js/jquery-3.4.1.min.js"></script>
+<script src="static/js/index.js"></script>
+<script>
+    // Add the following code if you want the name of the file appear on select
+    $(".custom-file-input").on("change", function () {
+        var fileName = $(this).val().split("\\").pop();
+        $(this).siblings(".custom-file-label").addClass("selected").html(fileName);
+    });
+</script>
+</body>
+</html>
