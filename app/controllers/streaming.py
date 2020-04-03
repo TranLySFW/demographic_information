@@ -6,6 +6,7 @@ import os
 import cv2
 import numpy as np
 import time
+import face_recognition
 import tensorflow as tf
 
 
@@ -37,7 +38,7 @@ def nearest_standing(image, detections, alpha):
             border = int((right - left) * alpha)
 
             if border > border_nearest:
-                border_nearest, center_x_nearest, center_y_nearest  = border, center_x, center_y
+                border_nearest, center_x_nearest, center_y_nearest = border, center_x, center_y
 
     x_right, y_up = int(center_x_nearest + border_nearest / 2), int(center_y_nearest - border_nearest / 2)
     x_left, y_down = int(center_x_nearest - border_nearest / 2), int(center_y_nearest + border_nearest / 2)
@@ -58,58 +59,40 @@ def main_stream():
     :return: flow of video frame
     """
     # ID verification
-    diff_threshold = -0.8  # Range[-1, 0]
-    diff_age_thres = -0.9  # Range[-1, 0]
-    diff_gender_thres = 0.05 # should in range[0.01, 0.3]
-
-    previous_gender = 0
-    previous_age = tf.zeros(shape=(1, 8), dtype=tf.float32)
-    previous_vector = tf.zeros(shape=(1, 128), dtype=tf.float32)
+    previous_id = np.zeros(shape=(1, 128))
+    detected_id_threshold = -0.9
     id_count = 0
 
-    frame_rate = 25 # adjust framerate from camera
+    frame_rate = 25  # adjust frame rate from camera
     prev = 0
-    alpha = 1.5 # border of face
+    alpha = 1.5  # border of face
 
     while True:
         time_elapsed = time.time() - prev  #
         ret, image = cap.read()  # get video frame
         if time_elapsed > 1. / frame_rate:
             prev = time.time()
-            # detect face in a picture
-            blob = cv2.dnn.blobFromImage(cv2.resize(image, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0))
-            predict.net.setInput(blob)
-            detections = predict.net.forward()
+
+            _, detections = predict.face_detector(image)  # detect face in a picture
             detected, crop_face, top_left, bottom_right = nearest_standing(image, detections, alpha)
 
             content = ""
             if detected:
-                age_prob = predict.predict_age_id(crop_face)
-                gender_prob = predict.predict_gender(crop_face)
-                text_gender = "M" if gender_prob[0][0] > 0.5 else "F"
-                text_age = str(np.argmax(age_prob[0]))
+                vector_face = face_recognition.face_encodings(crop_face)
+                if vector_face:
+                    age_prob = predict.predict_age_id(crop_face)
+                    gender_prob = predict.predict_gender(crop_face)
+                    text_gender = "M" if gender_prob[0][0] > 0.5 else "F"
+                    text_age = str(np.argmax(age_prob[0]))
 
-                vector_face = age_prob[1]
-                detected_gender_value = abs(gender_prob[0][0] - previous_gender)
-                detected_age_value = tf.keras.losses.cosine_similarity(previous_age, age_prob[0]).numpy()[0]
-                detected_id_value = tf.keras.losses.cosine_similarity(previous_vector, vector_face).numpy()[0]
-                text_id = "Unknown"
-                if detected_gender_value > diff_gender_thres:
-                    # print("Pass gender")
-                    if detected_age_value > diff_age_thres:
-                        # print("Pass age")
-#                       if detected_id_value > diff_threshold:
+                    detected_id = tf.keras.losses.cosine_similarity(previous_id, vector_face[0]).numpy()
+
+                    if detected_id > detected_id_threshold:
                         id_count += 1
-                else:
-                    if detected_age_value > -1 - diff_age_thres:
-                        id_count += 1
+                    previous_id = vector_face[0]
 
-                previous_vector = vector_face
-                previous_age = age_prob[0]
-                previous_gender = gender_prob[0][0]
-
-                content = "G: " + text_gender + ", R: " + text_age + ", ID: " + str(id_count)
-                image = draw_label(image, top_left, bottom_right, content)
+                    content = "G: " + text_gender + ", R: " + text_age + ", ID: " + str(id_count)
+                    image = draw_label(image, top_left, bottom_right, content)
 
             if not ret:
                 print("Error: failed to capture image")
