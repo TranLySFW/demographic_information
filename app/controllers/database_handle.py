@@ -14,6 +14,8 @@ import glob
 import pathlib
 from sqlite3 import Error
 import tensorflow as tf
+import dlib
+import face_recognition
 
 
 @app.route('/api/stream-and-write', methods=['GET', 'POST'])
@@ -34,9 +36,14 @@ def api_stream_and_write():
         record_max = 100000  # maximum of records in a table
 
         # ID verification
-        diff_threshold = -0.1  # Range[-1, 0]
-        previous_vector = tf.zeros(shape=(1, 128), dtype=tf.float32)  # zeros vector
-        id_count = 0  # counter times of detecting other faces
+        diff_threshold = -0.8  # Range[-1, 0]
+        diff_age_thres = -0.9  # Range[-1, 0]
+        diff_gender_thres = 0.05  # should in range[0.01, 0.3]
+
+        previous_gender = 0
+        previous_age = tf.zeros(shape=(1, 8), dtype=tf.float32)
+        previous_vector = tf.zeros(shape=(1, 128), dtype=tf.float32)
+        id_count = 0
 
         frame_rate = 25  # adjust framerate from camera
         prev = 0  # time counter
@@ -65,12 +72,25 @@ def api_stream_and_write():
 
                     text_gender = "M" if gender_prob[0][0] > 0.5 else "F"
                     text_age = str(np.argmax(age_prob[0]))
-                    vector_face = age_prob[1]
 
+                    vector_face = age_prob[1]
+                    detected_gender_value = abs(gender_prob[0][0] - previous_gender)
+                    detected_age_value = tf.keras.losses.cosine_similarity(previous_age, age_prob[0]).numpy()[0]
                     detected_id_value = tf.keras.losses.cosine_similarity(previous_vector, vector_face).numpy()[0]
-                    if detected_id_value > diff_threshold:
-                        id_count += 1
+                    text_id = "Unknown"
+                    if detected_gender_value > diff_gender_thres:
+                        # print("Pass gender")
+                        if detected_age_value > diff_age_thres:
+                            # print("Pass age")
+    #                       if detected_id_value > diff_threshold:
+                            id_count += 1
+                    else:
+                        if detected_age_value > -1 - diff_age_thres:
+                            id_count += 1
+
                     previous_vector = vector_face
+                    previous_age = age_prob[0]
+                    previous_gender = gender_prob[0][0]
 
                     # save content into dictionary
                     content = {
@@ -90,6 +110,69 @@ def api_stream_and_write():
 
     return Response(stream_with_context(generate_api_stream()))
 
+@app.route('/api/stream-and-write-2', methods=['GET', 'POST'])
+def api_stream_and_write_2():
+    def setup_database():
+        conn, path_to_db = create_connection() # setup new database
+        create_table(conn) # create predictor table
+        return conn, path_to_db
+
+    def generate_api_stream():
+        """
+        Streaming results as json
+        :param :
+        :return: flow of video frame as json and write record to database
+        """
+        conn, path_to_db = setup_database()  # create new database sqlite
+        record_count = 0  # counter of record is limited in one database
+        record_max = 100000  # maximum of records in a table
+
+        frame_rate = 25  # adjust framerate from camera
+        prev = 0  # time counter
+        alpha = 1.5  # border of faces
+
+        while True:
+            time_elapsed = time.time() - prev
+            ret, image = cap.read()  # get video frame
+            if time_elapsed > 1. / frame_rate:
+                prev = time.time()
+
+                record_count += 1  # record is written
+                if record_count == record_max:  # reach limitation
+                    conn, path_to_db = setup_database()  # setup new database
+
+                blob = cv2.dnn.blobFromImage(cv2.resize(image, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0))
+                predict.net.setInput(blob)
+                detections = predict.net.forward()
+                detected, crop_face, top_left, bottom_right = streaming.nearest_standing(image, detections, alpha)
+
+                content = {}
+                if detected:
+                    age_prob = predict.predict_age_id(crop_face)
+                    gender_prob = predict.predict_gender(crop_face)
+
+                    text_gender = "M" if gender_prob[0][0] > 0.5 else "F"
+                    text_age = str(np.argmax(age_prob[0]))
+
+                    vector_face = face_recognition.face_encodings(crop_face)
+                    if vector_face:
+                        # save content into dictionary
+                        content = {
+                                'gender': text_gender,
+                                'age': text_age,
+                                'id': 0,
+                                'vector': json.dumps(vector_face[0].tolist()),
+                        }
+                        # write record to database
+                        create_record(conn, (content['gender'], content['age'], content['id'], content['vector']))
+
+                        if not ret:
+                            print("Error: failed to capture image")
+                            break
+
+                        yield json.dumps(content)  # streaming dictionary to front end
+
+    return Response(stream_with_context(generate_api_stream()))
 
 @app.route('/api/test-database', methods=['GET', 'POST'])
 def test_database():
@@ -159,7 +242,7 @@ def create_table(conn):
                                             identification INTEGER,
                                             vector TEXT NOT NULL, 
                                             time TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"""
-
+    # time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     try:
         c = conn.cursor()
         c.execute(sql_create_table)

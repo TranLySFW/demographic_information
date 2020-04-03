@@ -58,7 +58,12 @@ def main_stream():
     :return: flow of video frame
     """
     # ID verification
-    diff_threshold = -0.1  # Range[-1, 0]
+    diff_threshold = -0.8  # Range[-1, 0]
+    diff_age_thres = -0.9  # Range[-1, 0]
+    diff_gender_thres = 0.05 # should in range[0.01, 0.3]
+
+    previous_gender = 0
+    previous_age = tf.zeros(shape=(1, 8), dtype=tf.float32)
     previous_vector = tf.zeros(shape=(1, 128), dtype=tf.float32)
     id_count = 0
 
@@ -85,12 +90,23 @@ def main_stream():
                 text_age = str(np.argmax(age_prob[0]))
 
                 vector_face = age_prob[1]
+                detected_gender_value = abs(gender_prob[0][0] - previous_gender)
+                detected_age_value = tf.keras.losses.cosine_similarity(previous_age, age_prob[0]).numpy()[0]
                 detected_id_value = tf.keras.losses.cosine_similarity(previous_vector, vector_face).numpy()[0]
                 text_id = "Unknown"
+                if detected_gender_value > diff_gender_thres:
+                    # print("Pass gender")
+                    if detected_age_value > diff_age_thres:
+                        # print("Pass age")
+#                       if detected_id_value > diff_threshold:
+                        id_count += 1
+                else:
+                    if detected_age_value > -1 - diff_age_thres:
+                        id_count += 1
 
-                if detected_id_value > diff_threshold:
-                    id_count += 1
                 previous_vector = vector_face
+                previous_age = age_prob[0]
+                previous_gender = gender_prob[0][0]
 
                 content = "G: " + text_gender + ", R: " + text_age + ", ID: " + str(id_count)
                 image = draw_label(image, top_left, bottom_right, content)

@@ -8,10 +8,13 @@ import cv2
 import numpy as np
 import json
 import time
+import datetime
 import tensorflow as tf
 
 # Compare between previous and current frame, it wont increase if there is no other person
 identification = 0
+previous_gender = 0
+previous_age = tf.zeros(shape=(1, 8), dtype=tf.float32)
 previous_vector = tf.zeros(shape=(1, 128), dtype=tf.float32)
 
 
@@ -22,9 +25,11 @@ def capture_frame():
     :param :
     :return: json file
     """
-    global identification, previous_vector
+    global identification, previous_vector, previous_age, previous_gender
     # ID verification
-    diff_threshold = -0.1  # Range[-1, 0]
+    diff_threshold = -0.8  # Range[-1, 0]
+    diff_age_thres = -0.8  # Range[-1, 0]
+    diff_gender_thres = 0.05 # should in range[0.01, 0.3]
 
     # adjust framerate from camera
     frame_rate = 25
@@ -48,23 +53,32 @@ def capture_frame():
         text_age = str(np.argmax(age_prob[0]))
 
         vector_face = age_prob[1]
+        detected_gender_value = abs(gender_prob[0][0] - previous_gender)
+        detected_age_value = tf.keras.losses.cosine_similarity(previous_age, age_prob[0]).numpy()[0]
         detected_id_value = tf.keras.losses.cosine_similarity(previous_vector, vector_face).numpy()[0]
         text_id = "Unknown"
-
-        if detected_id_value < diff_threshold:
-            text_id = "Same"
+        if detected_gender_value > diff_gender_thres:
+            # print("Pass gender")
+            if detected_age_value > diff_age_thres:
+                # print("Pass age")
+                #                       if detected_id_value > diff_threshold:
+                identification += 1
         else:
-            text_id = "Diff"
-            identification += 1
+            if detected_age_value > -1 - diff_age_thres:
+                identification += 1
 
         previous_vector = vector_face
+        previous_age = age_prob[0]
+        previous_gender = gender_prob[0][0]
 
         # content = "G: " + text_gender + ", R: " + text_age + ", ID: " + str(identification)
         content = {
                 'gender': text_gender,
                 'age': text_age,
                 'id': identification,
+                'time': datetime.datetime.now(),
                 'vector': vector_face[0].tolist(),
+
         }
 
     else:
@@ -82,7 +96,12 @@ def api_stream():
         :return: flow of video frame as json
         """
         # ID verification
-        diff_threshold = -0.1  # Range[-1, 0]
+        diff_threshold = -0.8  # Range[-1, 0]
+        diff_age_thres = -0.6  # Range[-1, 0]
+        diff_gender_thres = 0.05  # should in range[0.01, 0.3]
+
+        previous_gender = 0
+        previous_age = tf.zeros(shape=(1, 8), dtype=tf.float32)
         previous_vector = tf.zeros(shape=(1, 128), dtype=tf.float32)
         id_count = 0
 
@@ -117,22 +136,30 @@ def api_stream():
                     text_age = str(np.argmax(age_prob[0]))
 
                     vector_face = age_prob[1]
+                    detected_gender_value = abs(gender_prob[0][0] - previous_gender)
+                    detected_age_value = tf.keras.losses.cosine_similarity(previous_age, age_prob[0]).numpy()[0]
                     detected_id_value = tf.keras.losses.cosine_similarity(previous_vector, vector_face).numpy()[0]
                     text_id = "Unknown"
-
-                    if detected_id_value < diff_threshold:
-                        text_id = "Same"
+                    if detected_gender_value > diff_gender_thres:
+                        # print("Pass gender")
+                        if detected_age_value > diff_age_thres:
+                            # print("Pass age")
+                            #                       if detected_id_value > diff_threshold:
+                            id_count += 1
                     else:
-                        text_id = "Diff"
-                        id_count += 1
+                        if detected_age_value > -1 - diff_age_thres:
+                            id_count += 1
 
                     previous_vector = vector_face
+                    previous_age = age_prob[0]
+                    previous_gender = gender_prob[0][0]
 
                     # content = "G: " + text_gender + ", R: " + text_age + ", ID: " + str(id_count)
                     content = {
                             'gender': text_gender,
                             'age': text_age,
                             'id': identification,
+                            'time': datetime.datetime.now().strftime("%Y/%m/%d, %H:%M:%S"),
                             'vector': vector_face[0].tolist(),
                     }
 
@@ -142,4 +169,6 @@ def api_stream():
 
                     yield json.dumps(content)
 
-    return Response(stream_with_context(generate_api_stream()))
+    # return Response(stream_with_context(generate_api_stream()))
+    return Response(stream_with_context(generate_api_stream()), mimetype="text/plain")
+

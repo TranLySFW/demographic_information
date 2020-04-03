@@ -58,7 +58,7 @@ def face_detector(image):
     :param image:
     :return: list of cropped images
     """
-    alpha = 1.5  # ratio border around human face, the larger it is, the more backgroud it gets
+    alpha = 1.5  # ratio border around human face, the larger it is, the more background it gets
     confidence_para = 0.5  # set confidence of model
     height, width, channel = image.shape
     deploy_path = pathlib.Path(os.path.join(app.root_path, "models/deploy.prototxt"))  # path to caffee model
